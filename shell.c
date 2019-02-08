@@ -112,12 +112,18 @@ void clear_history(){
 }
 
 void view_history(int hist_num){
-	int temp = hist_num % 100;
 	int start;
-	if(hist_num >= 100) start = temp;
+	// prevent re-printing entries if demand exceeds number of commands in history
+	if(hist_num > hist_count) hist_num = hist_count;
+	if(hist_num > 100) hist_num = 100;
+	if(hist_count >= 100) start = hist_count % 100;
 	else start = 0;
+	
+	// print off commands in history:
 	for(int i=start; i<start+hist_num; i++){
-		if(strcmp(history[i%100],"") != 0) fprintf(stdout,"%s\n",history[i%100]);
+		if(strcmp(history[i%100],"") != 0){
+			fprintf(stdout,"%d\t%s\n",i-start,history[i%100]);
+		}
 	}
 }
 
@@ -153,7 +159,7 @@ int main(int argc, char *argv[]){
 			hist_count++;
 
 			// modify behavior if "history" command is found
-			if(strstr(temp,"history") != NULL){
+			if(strstr(temp,"history") != NULL && temp[0] == 'h'){
 				if(strstr(temp," -c") != NULL) clear_history();
 				else{
 					if(strstr(temp," ") == NULL) view_history(100);
