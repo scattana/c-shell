@@ -13,11 +13,17 @@
 // enable "true and false" to be used as boolean types
 typedef enum {false, true} bool;
 
+// global variable to contain command history (max 100):
+char history[100][BUFSIZ];
+int hist_count = 0;
+
 // Function Prototypes:
 char ** parse_options(char[]);
 void free_mem(char **);
 bool execute(char **);
 bool isBackground(char **);
+void clear_history();
+void view_history(int);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -64,6 +70,7 @@ bool execute(char **command){
 		background_flag = true;
 		int tmp = 0;
 		while(command[tmp] != NULL) tmp++;	// count # of elements, including last NULL
+		free(command[tmp-1]);	// about to be set to NULL, so first, free dynamic mem
 		command[tmp-1] = NULL;	// set & to be NULL
 	}
 
@@ -99,11 +106,27 @@ bool isBackground(char ** command){
 	else return false;
 }
 
+void clear_history(){
+	for(int i=0; i<100; i++) strcpy(history[i],"");
+	hist_count = 0;
+}
+
+void view_history(int hist_num){
+	int temp = hist_num % 100;
+	int start;
+	if(hist_num >= 100) start = temp;
+	else start = 0;
+	for(int i=start; i<start+hist_num; i++){
+		if(strcmp(history[i%100],"") != 0) fprintf(stdout,"%s\n",history[i%100]);
+	}
+}
+
 // MAIN function
 int main(int argc, char *argv[]){
 	fprintf(stdout,"\n%s\n\n","C Shell Programming (Seth Cattanach)");
 
 	char hold[BUFSIZ] = "";
+	clear_history();
 
 	// get and pre-process user command(s)
 	while(strcmp(hold,"exit") != 0){
@@ -124,10 +147,32 @@ int main(int argc, char *argv[]){
 				exit_flag = true;
 				continue;
 			}
+
+			// add the non-parsed command to history (before executing, regardless of success)
+			strcpy(history[hist_count%100],temp);
+			hist_count++;
+
+			// modify behavior if "history" command is found
+			if(strstr(temp,"history") != NULL){
+				if(strstr(temp," -c") != NULL) clear_history();
+				else{
+					if(strstr(temp," ") == NULL) view_history(100);
+					else{
+						char **t = parse_options(temp);
+						int hist_num = atoi(t[1]);		// get number of history commands
+						view_history(hist_num);		// view history with specified number of commands
+						free_mem(t);
+					}
+				}
+				continue;		// skip normal execution after handling "history" command
+			}
+
+
 			char **command = parse_options(temp);
 			execute(command);
 			free_mem(command);
-		}
+
+		}	// end of FOR loop
 		if(exit_flag) exit(0);	// "exit" was specified during last series of cmds
 
 		// test print parsed command
