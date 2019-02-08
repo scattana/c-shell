@@ -77,6 +77,9 @@ bool execute(char **command){
 	pid_t pid;
 	int status;
 
+	// prevent incorrect exit
+	if(strcmp(command[0],"exit") == 0) return false;
+
 	if((pid = fork()) < 0){
 		fprintf(stderr, "%s\n", "Error: Could not fork child process");
 		return false;		// could not fork child process
@@ -133,9 +136,10 @@ int main(int argc, char *argv[]){
 
 	char hold[BUFSIZ] = "";
 	clear_history();
+	bool false_exit_flag = false;
 
 	// get and pre-process user command(s)
-	while(strcmp(hold,"exit") != 0){
+	while(strcmp(hold,"exit") != 0 || (strcmp(hold,"exit")==0 && false_exit_flag)){
 		fprintf(stdout, "%s", "--> ");
 		fgets(hold, BUFSIZ, stdin);
 		if(strlen(hold) > 0) hold[strlen(hold)-1] = '\0';
@@ -143,16 +147,23 @@ int main(int argc, char *argv[]){
 
 		// tokenize semicolons and parse/execute each command appropriately:
 		bool exit_flag = false;
+		if((strstr(hold,"exit") != NULL) && (strlen(hold) > 4)) false_exit_flag = true;
 		char* arr = hold;
 		for(char *temp = strtok_r(arr,";",&arr); temp != NULL; temp = strtok_r(NULL,";",&arr)){
 			// strip leading space and trailing space if present
 			if(temp[0]==' ') temp++;
 			if(isspace(temp[strlen(temp)-1])) temp[strlen(temp)-1] = '\0';
 
+			// check for "!!" command
+			if(strcmp(temp,"!!")==0) temp = history[(hist_count-1)%100];
+
 			if(strcmp(temp,"exit")==0){
 				exit_flag = true;
 				continue;
 			}
+
+			// check for and handle commands of the form "!string"
+			if(
 
 			// add the non-parsed command to history (before executing, regardless of success)
 			strcpy(history[hist_count%100],temp);
@@ -171,7 +182,7 @@ int main(int argc, char *argv[]){
 					}
 				}
 				continue;		// skip normal execution after handling "history" command
-			}
+			}	
 
 
 			char **command = parse_options(temp);
@@ -189,6 +200,6 @@ int main(int argc, char *argv[]){
 		//}
 
 	}	// end of "while" loop
-	
+	fprintf(stdout,"end of main\n");	
 	return 0;
 }
