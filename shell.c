@@ -122,7 +122,7 @@ void view_history(int hist_num){
 	// print off commands in history:
 	for(int i=start; i<start+hist_num; i++){
 		if(strcmp(history[i%100],"") != 0){
-			fprintf(stdout,"%d\t%s\n",i-start,history[i%100]);
+			fprintf(stdout,"%d\t%s\n",i,history[i%100]);
 		}
 	}
 }
