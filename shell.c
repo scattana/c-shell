@@ -24,6 +24,8 @@ bool execute(char **);
 bool isBackground(char **);
 void clear_history();
 void view_history(int);
+char * find_rec_cmd(char*);
+bool starts_with(const char*, const char*);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -130,6 +132,23 @@ void view_history(int hist_num){
 	}
 }
 
+// returns most recent command in history with given prefix, or NULL if not found
+char * find_rec_cmd(char *prefix){
+	int most_recent_index = (hist_count-1) % 100;
+	for(int i=most_recent_index; i != hist_count; i--){
+		if(i==0) i = 99;
+		if(starts_with(prefix, history[i])) return history[i];
+	}
+	return NULL;		// if command with given prefix not found in history
+}
+
+// utility function that checks whether "string" starts with "prefix"
+bool starts_with(const char *prefix, const char *string){
+	size_t pre_length = strlen(prefix);
+	size_t str_length = strlen(string);
+	return str_length < pre_length ? false : strncmp(prefix, string, pre_length) == 0;
+}
+
 // MAIN function
 int main(int argc, char *argv[]){
 	fprintf(stdout,"\n%s\n\n","C Shell Programming (Seth Cattanach)");
@@ -163,7 +182,17 @@ int main(int argc, char *argv[]){
 			}
 
 			// check for and handle commands of the form "!string"
-			if(
+			if(strlen(temp) > 1){
+				if(temp[0]=='!' && temp[1]!='!'){
+					char *prefix =  temp;
+					prefix++;		// increment past initial '!' and set pointer
+					temp = find_rec_cmd(prefix);
+					if(temp == NULL){
+						fprintf(stderr,"%s\n","Error: matching prefix not found");
+						continue;		// skip remainder of execution
+					} else fprintf(stdout,"Executing command: %s\n",temp);
+				}
+			}
 
 			// add the non-parsed command to history (before executing, regardless of success)
 			strcpy(history[hist_count%100],temp);
