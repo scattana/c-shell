@@ -17,6 +17,9 @@ typedef enum {false, true} bool;
 char history[100][BUFSIZ];
 int hist_count = 0;
 
+// global variables to track whether a file stream needs to be closed
+bool input_flag = false, output_flag = false;
+
 // Function Prototypes:
 char ** parse_options(char[]);
 void free_mem(char **);
@@ -30,6 +33,7 @@ bool out_redir(char **);
 bool in_redir(char **);
 char * handle_output(char **);
 char * handle_input(char **);
+bool handle_io(char **);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -72,8 +76,7 @@ void free_mem(char ** ptr){
 bool execute(char **command){
 	// if background process, set flag and get rid of & from args:
 	bool background_flag = false;
-	bool input_flag = false, output_flag = false;
-	FILE *fin, *fout;
+	input_flag = false, output_flag = false;
 
 	if(isBackground(command)){
 		background_flag = true;
@@ -94,26 +97,10 @@ bool execute(char **command){
 		return false;		// could not fork child process
 	}
 	else if(pid == 0){	// this is the newly-created child process
-		// handle I/O redirection if necessary:
-		if(in_redir(command)){
-			char *infile = handle_input(command);
-			fin = freopen(infile,"r",stdin);
-			if(fin==NULL){
-				fprintf(stderr,"Error: failed to open file for reading\n");
-				return false;
-			}
-			input_flag = true;
-		}
-		if(out_redir(command)){
-			char *outfile = handle_output(command);
-			fout = freopen(outfile,"w",stdout);
-			if(fout==NULL){
-				fprintf(stderr,"Error: failed to open file for writing\n");
-				return false;
-			}
-			output_flag = true;
-		}
-	
+		
+		// handle any input or output redirection
+		if(!handle_io(command)) return false;
+
 		// try to execute "execvp" and return false if error
 		if(execvp(*command, command) < 0) {
 			fprintf(stderr, "%s\n", "Error: could not exec the specified command");
@@ -128,6 +115,7 @@ bool execute(char **command){
 			while(wait(&status) != pid) continue;	// wait for child to finish
 		}
 	}
+
 	if(input_flag){
 		if(fclose(stdin)!=0) fprintf(stderr,"Error: could not close infile\n");
 	}
@@ -243,6 +231,32 @@ char * handle_input(char ** cmd){
 	cmd[i-1] = NULL;
 	cmd[i-2] = NULL;
 	return filename;
+}
+
+// handle_io is one level of abstraction above "handle_input" and "handle_output"
+// it takes the modified command and conducts stream redirection as necessary
+bool handle_io(char ** command){
+	// handle I/O redirection if necessary:
+	FILE *fin, *fout;
+	if(in_redir(command)){
+		char *infile = handle_input(command);
+		fin = freopen(infile,"r",stdin);
+		if(fin==NULL){
+			fprintf(stderr,"Error: failed to open file for reading\n");
+			return false;
+		}
+		input_flag = true;
+	}
+	if(out_redir(command)){
+		char *outfile = handle_output(command);
+		fout = freopen(outfile,"w",stdout);
+		if(fout==NULL){
+			fprintf(stderr,"Error: failed to open file for writing\n");
+			return false;
+		}
+		output_flag = true;
+	}	
+	return true;		// successfully handled any I/O if present
 }
 
 // MAIN function
