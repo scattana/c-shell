@@ -34,6 +34,7 @@ bool in_redir(char **);
 char * handle_output(char **);
 char * handle_input(char **);
 bool handle_io(char **);
+char * strip_space_lead_trail(char *);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -74,6 +75,7 @@ void free_mem(char ** ptr){
 // tries to create child process and execute specified command (parameter)
 // returns "false" if unable to fork() or execvp()
 bool execute(char **command){
+	//fprintf(stderr,"testing... %s\n",command[0]);
 	// if background process, set flag and get rid of & from args:
 	bool background_flag = false;
 	input_flag = false, output_flag = false;
@@ -259,6 +261,13 @@ bool handle_io(char ** command){
 	return true;		// successfully handled any I/O if present
 }
 
+// strip leading and trailing spaces from an input string
+char * strip_space_lead_trail(char * temp){
+	if(temp[0]==' ') temp++;
+	if(isspace(temp[strlen(temp)-1])) temp[strlen(temp)-1] = '\0';
+	return temp;
+}
+
 // MAIN function
 int main(int argc, char *argv[]){
 	fprintf(stdout,"\n%s\n\n","C Shell Programming (Seth Cattanach)");
@@ -276,15 +285,15 @@ int main(int argc, char *argv[]){
 
 		// tokenize semicolons and parse/execute each command appropriately:
 		bool exit_flag = false;
-		if((strstr(hold,"exit") != NULL) && (strlen(hold) > 4)){
-			false_exit_flag = true;
-			fprintf(stderr,"%s\n","Error: unrecognized command");
-		}
 		char* arr = hold;
 		for(char *temp = strtok_r(arr,";",&arr); temp != NULL; temp = strtok_r(NULL,";",&arr)){
 			// strip leading space and trailing space if present
-			if(temp[0]==' ') temp++;
-			if(isspace(temp[strlen(temp)-1])) temp[strlen(temp)-1] = '\0';
+			temp = strip_space_lead_trail(temp);
+
+			if((strstr(temp,"exit") != NULL) && (strlen(temp) > 4)){
+				false_exit_flag = true;
+				fprintf(stderr,"%s\n","Error: unrecognized command");
+			}
 
 			// check for "!!" command
 			if(strcmp(temp,"!!")==0) temp = history[(hist_count-1)%100];
