@@ -26,6 +26,10 @@ void clear_history();
 void view_history(int);
 char * find_rec_cmd(char*);
 bool starts_with(const char*, const char*);
+bool out_redir(char **);
+bool in_redir(char **);
+char * handle_output(char **);
+char * handle_input(char **);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -68,6 +72,9 @@ void free_mem(char ** ptr){
 bool execute(char **command){
 	// if background process, set flag and get rid of & from args:
 	bool background_flag = false;
+	bool input_flag = false, output_flag = false;
+	FILE *fin, *fout;
+
 	if(isBackground(command)){
 		background_flag = true;
 		int tmp = 0;
@@ -79,6 +86,9 @@ bool execute(char **command){
 	pid_t pid;
 	int status;
 
+	// DEBUG: test print the command
+	for(int i=0; command[i] != NULL; i++) fprintf(stderr,"111 %s\n",command[i]);
+
 	// prevent incorrect exit
 	if(strcmp(command[0],"exit") == 0) return false;
 
@@ -87,17 +97,49 @@ bool execute(char **command){
 		return false;		// could not fork child process
 	}
 	else if(pid == 0){	// this is the newly-created child process
+		// handle I/O redirection if necessary:
+		if(in_redir(command)){
+			char *infile = handle_input(command);
+			fin = freopen(infile,"r",stdin);
+			if(fin==NULL){
+				fprintf(stderr,"Error: failed to open file for reading\n");
+				return false;
+			}
+			input_flag = true;
+		}
+		if(out_redir(command)){
+			char *outfile = handle_output(command);
+			fout = freopen(outfile,"w",stdout);
+			if(fout==NULL){
+				fprintf(stderr,"Error: failed to open file for writing\n");
+				return false;
+			}
+			output_flag = true;
+		}
+	
 		// try to execute "execvp" and return false if error
 		if(execvp(*command, command) < 0) {
 			fprintf(stderr, "%s\n", "Error: could not exec the specified command");
+			if(input_flag) fclose(stdin);
+			if(output_flag) fclose(stdout);
 			exit(1);		// terminate the forked process (w/exit failure status)
 			return false;
 		}
+		for(int i=0; command[i] != NULL; i++) fprintf(stderr,"222 %s\n",command[i]);
 	}
 	else{
 		if(!background_flag){	// ignore this and continue to exec in background
 			while(wait(&status) != pid) continue;	// wait for child to finish
 		}
+	}
+	for(int i=0; command[i] != NULL; i++) fprintf(stderr,"333 %s\n",command[i]);
+	if(input_flag){
+		fprintf(stderr,"inflag is true\n");
+		if(fclose(stdin)!=0) fprintf(stderr,"ERROR 1\n");
+	}
+	if(output_flag){
+		fprintf(stderr,"outflag is true\n");
+		if(fclose(stdout)!=0) fprintf(stderr,"ERROR 2\n");
 	}
 	return true;
 }
@@ -149,6 +191,65 @@ bool starts_with(const char *prefix, const char *string){
 	return str_length < pre_length ? false : strncmp(prefix, string, pre_length) == 0;
 }
 
+// out_redir returns true/false based on presence of output redirection
+bool out_redir(char ** cmd){
+	int i=0;
+	while(cmd[i] != NULL){
+		if(strcmp(cmd[i],">")==0) return true;
+		i++;
+	}
+	return false;
+}
+
+// in_redir returns true/false based on presence of input redirection
+bool in_redir(char ** cmd){
+	int i=0;
+	while(cmd[i] != NULL){
+		if(strcmp(cmd[i],"<")==0) return true;
+		i++;
+	}
+	return false;
+}
+
+// handle_output returns modified command and opens output file stream
+// (or returns NULL if there's an error in the command or while opening stream)
+char * handle_output(char ** cmd){
+	int i=0;
+	char *filename;
+	while(cmd[i] != NULL){
+		if(strcmp(cmd[i],">")==0){
+			if(cmd[i+1]==NULL) return NULL;
+			filename = cmd[i+1];
+			cmd[i+1] = NULL;
+			cmd[i] = NULL;
+			break;
+		}
+		i++;	// continue searching
+	}
+	return filename;
+}
+
+// handle_input returns modified command and opens input file stream
+// (or returns NULL if there's an error in the command or while opening stream)
+char * handle_input(char ** cmd){
+	int i=0;
+	char *filename;
+	while(cmd[i] != NULL){
+		if(strcmp(cmd[i],"<")==0){
+			if(i==0) return NULL;		// this would mean "<" is the first command
+			if(cmd[i+1]==NULL) return NULL;
+			filename = cmd[i+1];
+			// STILL NEED TO DELETE THE TWO ITEMS IN CMD
+			for(int j=i; cmd[j+2] != NULL; j++) cmd[j] = cmd[j+2];
+			break;
+		}
+		i++;		// continue searching
+	}
+	cmd[i-1] = NULL;
+	cmd[i-2] = NULL;
+	return filename;
+}
+
 // MAIN function
 int main(int argc, char *argv[]){
 	fprintf(stdout,"\n%s\n\n","C Shell Programming (Seth Cattanach)");
@@ -166,7 +267,10 @@ int main(int argc, char *argv[]){
 
 		// tokenize semicolons and parse/execute each command appropriately:
 		bool exit_flag = false;
-		if((strstr(hold,"exit") != NULL) && (strlen(hold) > 4)) false_exit_flag = true;
+		if((strstr(hold,"exit") != NULL) && (strlen(hold) > 4)){
+			false_exit_flag = true;
+			fprintf(stderr,"%s\n","Error: unrecognized command");
+		}
 		char* arr = hold;
 		for(char *temp = strtok_r(arr,";",&arr); temp != NULL; temp = strtok_r(NULL,";",&arr)){
 			// strip leading space and trailing space if present
@@ -176,6 +280,7 @@ int main(int argc, char *argv[]){
 			// check for "!!" command
 			if(strcmp(temp,"!!")==0) temp = history[(hist_count-1)%100];
 
+			// check for and set exit condition if present
 			if(strcmp(temp,"exit")==0){
 				exit_flag = true;
 				continue;
@@ -211,7 +316,7 @@ int main(int argc, char *argv[]){
 					}
 				}
 				continue;		// skip normal execution after handling "history" command
-			}	
+			}
 
 
 			char **command = parse_options(temp);
@@ -229,6 +334,5 @@ int main(int argc, char *argv[]){
 		//}
 
 	}	// end of "while" loop
-	fprintf(stdout,"end of main\n");	
 	return 0;
 }
