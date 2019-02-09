@@ -48,14 +48,12 @@ char ** parse_options(char input[]){
 	// allocate space for the array of strings itself
 	char **args;
 	args = malloc(sizeof(char*) * (spaces+2));			// allocate space for N strings
-fprintf(stderr,"1-JUST MALLOCED BLOCK IN parse_options AT ADDRESS %p\n",args);
 	// note: +1 b/c # of words = spaces+1, and another +1 for NULL terminator
 
 	// tokenize input string with strtok, allocate mem, and copy into array of strings
 	int i=0;
 	for(char *temp = strtok(input," "); temp != NULL; temp = strtok(NULL," ")){
 		args[i] = malloc(BUFSIZ * sizeof(char));
-fprintf(stderr,"2-JUST MALLOCED BLOCK IN parse_options AT ADDRESS %p\n",args[i]);
 		strcpy(args[i], temp);
 		i++;
 
@@ -67,75 +65,44 @@ fprintf(stderr,"2-JUST MALLOCED BLOCK IN parse_options AT ADDRESS %p\n",args[i])
 
 // releases dynamically allocated memory for an array of strings
 void free_mem(char *** ptr){
-//fprintf(stderr,"beginning of free_mem\n");
 	int len = -1;
 	while(ptr[++len] != NULL) continue;	// continues until "len" is the # of commands
-fprintf(stderr,"len is %d\n",len);
-//fprintf(stderr,"before first FOR, len is %d\n",len);
 	for(int i=0; i<len; i++){
-fprintf(stderr,"inside FOR, i = %d\n",i);
-//fprintf(stderr,"inside first FOR\n");
 		int args=0;
-//fprintf(stderr,"first arg is %s\n",ptr[i][args]);
-//fprintf(stderr,"second arg is %s\n",ptr[i][args+1]);
 
 		while(ptr[i][args] != NULL){
-//fprintf(stderr,"ptr[%d][%d] is %s\n",i,args,ptr[i][args]);
 			args++;
 		}
-//fprintf(stderr,"before second FOR\n");
 		for(int j=0; j<args; j++){
-fprintf(stderr,"1-JUST FREED A BLOCK AT %p\n",ptr[i][j]);
 			free(ptr[i][j]);
 		}
-fprintf(stderr,"2-JUST FREED A BLOCK AT %p\n",ptr[i]);
 		free(ptr[i]);
-//		free(ptr[i+1]);
-//fprintf(stderr,"attempted FREE at %p\n",ptr[i+1]);
 	}
-fprintf(stderr,"3-JUST FREED ptr AT %p\n",ptr);
 	free(ptr);
-
-//	for(int i=0; i<len; i++){
-//		free(ptr[i]);
-//	}
-//	free(ptr);
 }
 
 // tries to create child process and execute specified command (parameter)
 // returns "false" if unable to fork() or execvp()
 bool execute(char ***commands, int cmd_count){
-//fprintf(stderr,"beginning of execute\n");
-
 	int cmd_index = 0;
-//fprintf(stderr,"cmd_count is %d\n",cmd_count);
-
+	
 	// set up pipe work
 	int p[2];
 	int fd_in = 0;
 	
 	// get first command
 	char **command = *commands;
-//fprintf(stderr,"second command[0] is: %s\n",commands[1][0]);
-//	command++;
-//for(int i=0; command[i] != NULL; i++) fprintf(stderr,"command[%d] is: %s\n",i,command[i]);
 
-//fprintf(stderr,"right before while loop in execute\n");
 	while(cmd_index != cmd_count){
-//fprintf(stderr,"right inside while loop in execute, command[0] is %s\n",command[0]);
-		//command = commands[cmd_index];
 		if(cmd_count > 1){
 			if(pipe(p) != 0){
 				fprintf(stderr,"%s\n","Error: could not pipe");
 				return false;
 			}
 		}
-//fprintf(stderr,"right after creating pipe\n");
-		//fprintf(stderr,"testing... %s\n",command[0]);
 		// if background process, set flag and get rid of & from args:
 		bool background_flag = false;
 		input_flag = false, output_flag = false;
-//fprintf(stderr,"right before isBackground\n");
 		if(isBackground(command)){
 			background_flag = true;
 			int tmp = 0;
@@ -149,7 +116,6 @@ bool execute(char ***commands, int cmd_count){
 
 		// prevent incorrect exit
 		if(strcmp(command[0],"exit") == 0) return false;
-//fprintf(stderr,"right before forking\n");
 		// START FORKING HERE
 		if((pid = fork()) < 0){
 			fprintf(stderr, "%s\n", "Error: Could not fork child process");
@@ -165,9 +131,7 @@ bool execute(char ***commands, int cmd_count){
 
 			// handle any input or output redirection
 			if(!handle_io(command)) return false;
-//fprintf(stderr,"right before exec, within child process\n");
 			// try to execute "execvp" and return false if error
-//fprintf(stderr,"trying to exec: %s\n", *command);
 			if(execvp(*command, command) < 0) {
 				fprintf(stderr, "%s\n", "Error: could not exec the specified command");
 				if(input_flag) fclose(stdin);
@@ -175,7 +139,6 @@ bool execute(char ***commands, int cmd_count){
 				exit(1);		// terminate the forked process (w/exit failure status)
 				return false;
 			}
-//fprintf(stderr,"right after exec\n");
 		}
 		else{
 			if(!background_flag){	// ignore this and continue to exec in background
@@ -294,7 +257,6 @@ char * handle_input(char ** cmd){
 			if(i==0) return NULL;		// this would mean "<" is the first command
 			if(cmd[i+1]==NULL) return NULL;
 			filename = cmd[i+1];
-			// STILL NEED TO DELETE THE TWO ITEMS IN CMD
 			for(int j=i; cmd[j+2] != NULL; j++) cmd[j] = cmd[j+2];
 			break;
 		}
@@ -310,7 +272,6 @@ char * handle_input(char ** cmd){
 // handle_io is one level of abstraction above "handle_input" and "handle_output"
 // it takes the modified command and conducts stream redirection as necessary
 bool handle_io(char ** command){
-	// handle I/O redirection if necessary:
 	FILE *fin, *fout;
 	if(in_redir(command)){
 		char *infile = handle_input(command);
@@ -407,7 +368,7 @@ int main(int argc, char *argv[]){
 					else{
 						char **t = parse_options(temp);
 						int hist_num = atoi(t[1]);		// get number of history commands
-						view_history(hist_num);		// view history with specified number of commands
+						view_history(hist_num);		// view history with N commands
 						// edge case: free memory
 						int x=0;
 						while(t[x] != NULL) x++;
@@ -420,57 +381,25 @@ int main(int argc, char *argv[]){
 
 			// count and parse for PIPES
 			int num_pipes = count_pipes(temp);	// get number of pipes in the string
-fprintf(stderr,"num_pipes is: %d\n",num_pipes);
 			char *** commands;
 			commands = malloc(sizeof(char**) * (num_pipes+2));
-fprintf(stderr,"JUST MALLOCED IN main AT ADDRESS %p\n",commands);		
 			int cmd_count = 0;
 			char **command;
 			for(char *t = strtok_r(temp,"|",&temp); t != NULL; t = strtok_r(NULL,"|",&temp)){
 				command = parse_options(t);
-//				commands[cmd_count] = malloc(sizeof(char*) * BUFSIZ);
-//fprintf(stderr,"JUST MALLOCED SECOND TIME IN main AT ADDDRESS %p\n",commands[cmd_count]);
 
-				//strcpy(commands[cmd_count],command);
 				commands[cmd_count] = command;
-//fprintf(stderr,"just added `%s` to commands at index %d\n",command[0],cmd_count);
-				//commands[cmd_count][arg_index] = (char [])NULL;
-//				strcpy(commands[cmd_count][arg_index],"\0");
 				cmd_count++;
 			}
-			//strcpy(commands[cmd_count],NULL);
 			commands[cmd_count] = NULL;
-//fprintf(stderr,"after loop, just added NULL to commands[%d]\n",cmd_count);
 
-			//commands[num_pipes+1] = NULL;	// NULL-ify last command
-
-
-			//char **command = parse_options(temp);
 			execute(commands, cmd_count);
 			
-			// DEBUG: print all commands!
-//			for(int i=0; i<cmd_count; i++){
-//				for(int j=0; strcmp(commands[i][j],"\0")!=0; j++){
-//					fprintf(stderr,"commands[%d][%d] is: %s\n",i,j,commands[i][j]);
-//				}
-//			}
-
-//fprintf(stderr,"made it here\n");
-
-
 			// free memory!
 			free_mem(commands);
-//fprintf(stderr,"right after free_mem\n");
 
 		}	// end of FOR loop (strtok ; )
 		if(exit_flag) exit(0);	// "exit" was specified during last series of cmds
-
-		// test print parsed command
-		//const char** ptr = (const char**)command;
-		//while(*ptr != 0){
-		//	fprintf(stdout, "%s\n", *ptr);
-		//	ptr++;
-		//}
 
 	}	// end of "while" loop
 	return 0;
