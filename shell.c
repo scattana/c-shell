@@ -428,8 +428,8 @@ fprintf(stderr,"JUST MALLOCED IN main AT ADDRESS %p\n",commands);
 			char **command;
 			for(char *t = strtok_r(temp,"|",&temp); t != NULL; t = strtok_r(NULL,"|",&temp)){
 				command = parse_options(t);
-				commands[cmd_count] = malloc(sizeof(char*) * BUFSIZ);
-fprintf(stderr,"JUST MALLOCED SECOND TIME IN main AT ADDDRESS %p\n",commands[cmd_count]);
+//				commands[cmd_count] = malloc(sizeof(char*) * BUFSIZ);
+//fprintf(stderr,"JUST MALLOCED SECOND TIME IN main AT ADDDRESS %p\n",commands[cmd_count]);
 
 				//strcpy(commands[cmd_count],command);
 				commands[cmd_count] = command;
