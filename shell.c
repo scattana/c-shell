@@ -23,7 +23,7 @@ bool input_flag = false, output_flag = false;
 // Function Prototypes:
 char ** parse_options(char[]);
 void free_mem(char **);
-bool execute(char **);
+bool execute(char ***, int);
 bool isBackground(char **);
 void clear_history();
 void view_history(int);
@@ -35,6 +35,7 @@ char * handle_output(char **);
 char * handle_input(char **);
 bool handle_io(char **);
 char * strip_space_lead_trail(char *);
+int count_pipes(char *);
 
 
 // takes in a single command returns a dynamically-allocated array of strings
@@ -74,56 +75,98 @@ void free_mem(char ** ptr){
 
 // tries to create child process and execute specified command (parameter)
 // returns "false" if unable to fork() or execvp()
-bool execute(char **command){
-	//fprintf(stderr,"testing... %s\n",command[0]);
-	// if background process, set flag and get rid of & from args:
-	bool background_flag = false;
-	input_flag = false, output_flag = false;
+bool execute(char ***commands, int cmd_count){
+	fprintf(stderr,"beginning of execute\n");
 
-	if(isBackground(command)){
-		background_flag = true;
-		int tmp = 0;
-		while(command[tmp] != NULL) tmp++;	// count # of elements, including last NULL
-		free(command[tmp-1]);	// about to be set to NULL, so first, free dynamic mem
-		command[tmp-1] = NULL;	// set & to be NULL
-	}
+	int cmd_index = 0;
+fprintf(stderr,"cmd_count is %d\n",cmd_count);
 
-	pid_t pid;
-	int status;
+	// set up pipe work
+	int p[2];
+	int fd_in = 0;
+	
+	// get first command
+	char **command = *commands;
+//fprintf(stderr,"second command[0] is: %s\n",commands[1][0]);
+//	command++;
+	for(int i=0; command[i] != NULL; i++) fprintf(stderr,"command[%d] is: %s\n",i,command[i]);
 
-	// prevent incorrect exit
-	if(strcmp(command[0],"exit") == 0) return false;
-
-	if((pid = fork()) < 0){
-		fprintf(stderr, "%s\n", "Error: Could not fork child process");
-		return false;		// could not fork child process
-	}
-	else if(pid == 0){	// this is the newly-created child process
-		
-		// handle any input or output redirection
-		if(!handle_io(command)) return false;
-
-		// try to execute "execvp" and return false if error
-		if(execvp(*command, command) < 0) {
-			fprintf(stderr, "%s\n", "Error: could not exec the specified command");
-			if(input_flag) fclose(stdin);
-			if(output_flag) fclose(stdout);
-			exit(1);		// terminate the forked process (w/exit failure status)
-			return false;
+	fprintf(stderr,"right before while loop in execute\n");
+	while(cmd_index != cmd_count){
+		fprintf(stderr,"right inside while loop in execute, command[0] is %s\n",command[0]);
+		//command = commands[cmd_index];
+		if(cmd_count > 1){
+			if(pipe(p) != 0){
+				fprintf(stderr,"%s\n","Error: could not pipe");
+				return false;
+			}
 		}
-	}
-	else{
-		if(!background_flag){	// ignore this and continue to exec in background
-			while(wait(&status) != pid) continue;	// wait for child to finish
+fprintf(stderr,"right after creating pipe\n");
+		//fprintf(stderr,"testing... %s\n",command[0]);
+		// if background process, set flag and get rid of & from args:
+		bool background_flag = false;
+		input_flag = false, output_flag = false;
+fprintf(stderr,"right before isBackground\n");
+		if(isBackground(command)){
+			background_flag = true;
+			int tmp = 0;
+			while(command[tmp] != NULL) tmp++;	// count # of elements, including last NULL
+			free(command[tmp-1]);	// about to be set to NULL, so first, free dynamic mem
+			command[tmp-1] = NULL;	// set & to be NULL
 		}
-	}
 
-	if(input_flag){
-		if(fclose(stdin)!=0) fprintf(stderr,"Error: could not close infile\n");
-	}
-	if(output_flag){
-		if(fclose(stdout)!=0) fprintf(stderr,"Error: could not close outfile\n");
-	}
+		pid_t pid;
+		int status;
+
+		// prevent incorrect exit
+		if(strcmp(command[0],"exit") == 0) return false;
+fprintf(stderr,"right before forking\n");
+		// START FORKING HERE
+		if((pid = fork()) < 0){
+			fprintf(stderr, "%s\n", "Error: Could not fork child process");
+			return false;		// could not fork child process
+		}
+		else if(pid == 0){	// this is the newly-created child process
+			// handle pipe! but only if cmd_count > 1
+			if(cmd_count > 1){
+				dup2(fd_in, 0);
+				if(commands[cmd_index+1] != NULL) dup2(p[1], 1);
+				close(p[0]);
+			}
+
+			// handle any input or output redirection
+			if(!handle_io(command)) return false;
+fprintf(stderr,"right before exec, within child process\n");
+			// try to execute "execvp" and return false if error
+fprintf(stderr,"trying to exec: %s\n", *command);
+			if(execvp(*command, command) < 0) {
+				fprintf(stderr, "%s\n", "Error: could not exec the specified command");
+				if(input_flag) fclose(stdin);
+				if(output_flag) fclose(stdout);
+				exit(1);		// terminate the forked process (w/exit failure status)
+				return false;
+			}
+fprintf(stderr,"right after exec\n");
+		}
+		else{
+			if(!background_flag){	// ignore this and continue to exec in background
+				while(wait(&status) != pid) continue;	// wait for child to finish
+			}
+			if(cmd_count > 1){
+				close(p[1]);
+				fd_in = p[0];	// save input for next command
+			}
+		}
+
+		if(input_flag){
+			if(fclose(stdin)!=0) fprintf(stderr,"Error: could not close infile\n");
+		}
+		if(output_flag){
+			if(fclose(stdout)!=0) fprintf(stderr,"Error: could not close outfile\n");
+		}
+		cmd_index++;
+		if(commands[cmd_index] != NULL) command = commands[cmd_index];
+	}	// end of pipe WHILE
 	return true;
 }
 
@@ -268,6 +311,12 @@ char * strip_space_lead_trail(char * temp){
 	return temp;
 }
 
+int count_pipes(char * cmd){
+	int count = 0;
+	for(int i=0; i<strlen(cmd); i++) if(cmd[i]=='|') count++;
+	return count;
+}
+
 // MAIN function
 int main(int argc, char *argv[]){
 	fprintf(stdout,"\n%s\n\n","C Shell Programming (Seth Cattanach)");
@@ -336,12 +385,50 @@ int main(int argc, char *argv[]){
 				continue;		// skip normal execution after handling "history" command
 			}
 
+			// count and parse for PIPES
+			int num_pipes = count_pipes(temp);	// get number of pipes in the string
+fprintf(stderr,"num_pipes is: %d\n",num_pipes);
+			char *** commands;
+			commands = malloc(sizeof(char**) * (num_pipes+2));
+			int cmd_count = 0;
+			char **command;
+			//char **to_be_freed[
+			for(char *t = strtok_r(temp,"|",&temp); t != NULL; t = strtok_r(NULL,"|",&temp)){
+				command = parse_options(t);
+				fprintf(stderr,"pointer address: %p\n",command);
+				commands[cmd_count] = malloc(sizeof(char*) * BUFSIZ);
+				//strcpy(commands[cmd_count],command);
+				commands[cmd_count] = command;
+fprintf(stderr,"just added `%s` to commands at index %d\n",command[0],cmd_count);
+				//commands[cmd_count][arg_index] = (char [])NULL;
+//				strcpy(commands[cmd_count][arg_index],"\0");
+				cmd_count++;
+			}
+			//strcpy(commands[cmd_count],NULL);
+			commands[cmd_count] = NULL;
+fprintf(stderr,"after loop, just added NULL to commands[%d]\n",cmd_count);
 
-			char **command = parse_options(temp);
-			execute(command);
-			free_mem(command);
+			//commands[num_pipes+1] = NULL;	// NULL-ify last command
 
-		}	// end of FOR loop
+
+			//char **command = parse_options(temp);
+			execute(commands, cmd_count);
+			
+			// DEBUG: print all commands!
+//			for(int i=0; i<cmd_count; i++){
+//				for(int j=0; strcmp(commands[i][j],"\0")!=0; j++){
+//					fprintf(stderr,"commands[%d][%d] is: %s\n",i,j,commands[i][j]);
+//				}
+//			}
+
+			fprintf(stderr,"made it here\n");
+
+
+			// free memory!
+			//for(int i=0; i<(num_pipes+1); i++) free_mem((char **)commands[i]);
+			fprintf(stderr,"right after free_mem\n");
+
+		}	// end of FOR loop (strtok ; )
 		if(exit_flag) exit(0);	// "exit" was specified during last series of cmds
 
 		// test print parsed command
