@@ -86,9 +86,6 @@ bool execute(char **command){
 	pid_t pid;
 	int status;
 
-	// DEBUG: test print the command
-	for(int i=0; command[i] != NULL; i++) fprintf(stderr,"111 %s\n",command[i]);
-
 	// prevent incorrect exit
 	if(strcmp(command[0],"exit") == 0) return false;
 
@@ -125,21 +122,17 @@ bool execute(char **command){
 			exit(1);		// terminate the forked process (w/exit failure status)
 			return false;
 		}
-		for(int i=0; command[i] != NULL; i++) fprintf(stderr,"222 %s\n",command[i]);
 	}
 	else{
 		if(!background_flag){	// ignore this and continue to exec in background
 			while(wait(&status) != pid) continue;	// wait for child to finish
 		}
 	}
-	for(int i=0; command[i] != NULL; i++) fprintf(stderr,"333 %s\n",command[i]);
 	if(input_flag){
-		fprintf(stderr,"inflag is true\n");
-		if(fclose(stdin)!=0) fprintf(stderr,"ERROR 1\n");
+		if(fclose(stdin)!=0) fprintf(stderr,"Error: could not close infile\n");
 	}
 	if(output_flag){
-		fprintf(stderr,"outflag is true\n");
-		if(fclose(stdout)!=0) fprintf(stderr,"ERROR 2\n");
+		if(fclose(stdout)!=0) fprintf(stderr,"Error: could not close outfile\n");
 	}
 	return true;
 }
@@ -245,6 +238,8 @@ char * handle_input(char ** cmd){
 		}
 		i++;		// continue searching
 	}
+	// move "i" to the index of the first NULL element of "cmd"
+	for(i=0; cmd[i]!=NULL; i++) continue;
 	cmd[i-1] = NULL;
 	cmd[i-2] = NULL;
 	return filename;
