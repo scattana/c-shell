@@ -23,7 +23,7 @@ bool input_flag = false, output_flag = false;
 // Function Prototypes:
 char ** parse_options(char[]);
 void free_mem(char ***);
-bool execute(char ***, int);
+bool execute(char ***, int, bool);
 bool isBackground(char **);
 void clear_history();
 void view_history(int);
@@ -36,7 +36,6 @@ char * handle_input(char **);
 bool handle_io(char **);
 char * strip_space_lead_trail(char *);
 int count_pipes(char *);
-
 
 // takes in a single command returns a dynamically-allocated array of strings
 // to pass to execvp()
@@ -68,69 +67,51 @@ void free_mem(char *** ptr){
 	int len = -1;
 	while(ptr[++len] != NULL) continue;	// continues until "len" is the # of commands
 	for(int i=0; i<len; i++){
-		int args=0;
-
-		while(ptr[i][args] != NULL){
-			args++;
-		}
-		for(int j=0; j<args; j++){
-			free(ptr[i][j]);
-		}
-		free(ptr[i]);
-	}
-	free(ptr);
+		int args=0;									// to track number of args
+		while(ptr[i][args] != NULL) args++;			// get length of args
+		for(int j=0; j<args; j++) free(ptr[i][j]);	// deallocate args
+		free(ptr[i]);								// deallocate command
+	} free(ptr);									// deallocate array of commands
 }
 
 // tries to create child process and execute specified command (parameter)
 // returns "false" if unable to fork() or execvp()
-bool execute(char ***commands, int cmd_count){
+bool execute(char ***commands, int cmd_count, bool background_flag){
 	int cmd_index = 0;
-	
-	// set up pipe work
-	int p[2];
+	int p[2];								// set up pipe work
 	int fd_in = 0;
-	
-	// get first command
-	char **command = *commands;
+	char **command = *commands;				// get first command
 
-	while(cmd_index != cmd_count){
+	while(cmd_index != cmd_count){			// continuous loop for all pipes (if any)
 		if(cmd_count > 1){
 			if(pipe(p) != 0){
 				fprintf(stderr,"%s\n","Error: could not pipe");
 				return false;
 			}
 		}
-		// if background process, set flag and get rid of & from args:
-		bool background_flag = false;
-		input_flag = false, output_flag = false;
-		if(isBackground(command)){
-			background_flag = true;
-			int tmp = 0;
-			while(command[tmp] != NULL) tmp++;	// count # of elements, including last NULL
-			free(command[tmp-1]);	// about to be set to NULL, so first, free dynamic mem
-			command[tmp-1] = NULL;	// set & to be NULL
-		}
 
-		pid_t pid;
-		int status;
+		pid_t pid;							// track process ID
+		int status;							// track process status
 
 		// prevent incorrect exit
 		if(strcmp(command[0],"exit") == 0) return false;
-		// START FORKING HERE
-		if((pid = fork()) < 0){
+
+		if((pid = fork()) < 0){				// start FORKING here!
 			fprintf(stderr, "%s\n", "Error: Could not fork child process");
-			return false;		// could not fork child process
+			return false;					// could not fork child process
 		}
-		else if(pid == 0){	// this is the newly-created child process
-			// handle pipe! but only if cmd_count > 1
-			if(cmd_count > 1){
+		else if(pid == 0){					// this is the newly-created child process
+			if(cmd_count > 1){				// handle pipe if needed (>1 command)
 				dup2(fd_in, 0);
 				if(commands[cmd_index+1] != NULL) dup2(p[1], 1);
 				close(p[0]);
 			}
 
 			// handle any input or output redirection
-			if(!handle_io(command)) return false;
+			if(!handle_io(command)){
+				exit(1);					// kill forked process before returning
+				return false;
+			}
 			// try to execute "execvp" and return false if error
 			if(execvp(*command, command) < 0) {
 				fprintf(stderr, "%s\n", "Error: could not exec the specified command");
@@ -141,16 +122,15 @@ bool execute(char ***commands, int cmd_count){
 			}
 		}
 		else{
-			if(!background_flag){	// ignore this and continue to exec in background
+			if(!background_flag){			// ignore this and continue to exec in background
 				while(wait(&status) != pid) continue;	// wait for child to finish
 			}
 			if(cmd_count > 1){
 				close(p[1]);
-				fd_in = p[0];	// save input for next command
+				fd_in = p[0];				// save input for next command
 			}
 		}
-
-		if(input_flag){
+		if(input_flag){						// close file streams, as necessary
 			if(fclose(stdin)!=0) fprintf(stderr,"Error: could not close infile\n");
 		}
 		if(output_flag){
@@ -171,11 +151,13 @@ bool isBackground(char ** command){
 	else return false;
 }
 
+// called when "history -c" is indicated
 void clear_history(){
 	for(int i=0; i<100; i++) strcpy(history[i],"");
 	hist_count = 0;
 }
 
+// view history with specified number of entries (oldest first)
 void view_history(int hist_num){
 	int start;
 	// prevent re-printing entries if demand exceeds number of commands in history
@@ -242,7 +224,7 @@ char * handle_output(char ** cmd){
 			cmd[i] = NULL;
 			break;
 		}
-		i++;	// continue searching
+		i++;							// continue searching
 	}
 	return filename;
 }
@@ -260,7 +242,7 @@ char * handle_input(char ** cmd){
 			for(int j=i; cmd[j+2] != NULL; j++) cmd[j] = cmd[j+2];
 			break;
 		}
-		i++;		// continue searching
+		i++;							// continue searching
 	}
 	// move "i" to the index of the first NULL element of "cmd"
 	for(i=0; cmd[i]!=NULL; i++) continue;
@@ -291,7 +273,7 @@ bool handle_io(char ** command){
 		}
 		output_flag = true;
 	}	
-	return true;		// successfully handled any I/O if present
+	return true;						// successfully handled any I/O if present
 }
 
 // strip leading and trailing spaces from an input string
@@ -301,6 +283,7 @@ char * strip_space_lead_trail(char * temp){
 	return temp;
 }
 
+// count and return number of pipes in a command
 int count_pipes(char * cmd){
 	int count = 0;
 	for(int i=0; i<strlen(cmd); i++) if(cmd[i]=='|') count++;
@@ -325,6 +308,7 @@ int main(int argc, char *argv[]){
 		// tokenize semicolons and parse/execute each command appropriately:
 		bool exit_flag = false;
 		char* arr = hold;
+
 		for(char *temp = strtok_r(arr,";",&arr); temp != NULL; temp = strtok_r(NULL,";",&arr)){
 			// strip leading space and trailing space if present
 			temp = strip_space_lead_trail(temp);
@@ -361,11 +345,15 @@ int main(int argc, char *argv[]){
 			hist_count++;
 
 			// modify behavior if "history" command is found
-			if(strstr(temp,"history") != NULL && temp[0] == 'h'){
+			if((strstr(temp,"history") != NULL) && (temp[0] == 'h')){
 				if(strstr(temp," -c") != NULL) clear_history();
 				else{
-					if(strstr(temp," ") == NULL) view_history(100);
+					if((strstr(temp," ") == NULL) && (strlen(temp)==7)) view_history(100);
 					else{
+						if((strstr(temp," ") == NULL) && (strlen(temp)!=7)){	// error!
+							fprintf(stderr,"%s\n","Error: invalid command");
+							continue;
+						}
 						char **t = parse_options(temp);
 						int hist_num = atoi(t[1]);		// get number of history commands
 						view_history(hist_num);		// view history with N commands
@@ -380,26 +368,33 @@ int main(int argc, char *argv[]){
 			}
 
 			// count and parse for PIPES
-			int num_pipes = count_pipes(temp);	// get number of pipes in the string
+			int num_pipes = count_pipes(temp);			// get number of pipes in the string
 			char *** commands;
 			commands = malloc(sizeof(char**) * (num_pipes+2));
 			int cmd_count = 0;
 			char **command;
+			bool background_flag = false;
 			for(char *t = strtok_r(temp,"|",&temp); t != NULL; t = strtok_r(NULL,"|",&temp)){
 				command = parse_options(t);
+				if(isBackground(command)){
+					background_flag = true;				// trim & symbol and free its memory
+					int x=0;
+					while(command[x] != NULL) x++;		// increment until end
+					free(command[x-1]);					// dealloc mem before overwriting
+					command[x-1] = NULL;				// overwrite "&" character
+				}
 
-				commands[cmd_count] = command;
-				cmd_count++;
+				commands[cmd_count] = command;			// push command to "commands" list
+				cmd_count++;							// track how many commands
 			}
-			commands[cmd_count] = NULL;
+			commands[cmd_count] = NULL;					// sentinel for final command
 
-			execute(commands, cmd_count);
+			execute(commands, cmd_count, background_flag);
 			
-			// free memory!
-			free_mem(commands);
+			free_mem(commands);							// free heap memory
 
 		}	// end of FOR loop (strtok ; )
-		if(exit_flag) exit(0);	// "exit" was specified during last series of cmds
+		if(exit_flag) exit(0);	// if "exit" was specified during last series of cmds
 
 	}	// end of "while" loop
 	return 0;
