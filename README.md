@@ -34,10 +34,11 @@ To run the executable, simply type `./shell` (if you get a permission denied err
 | A command executed in the background (&)				| --> cat myFile.txt &			|
 | A command whose output is redirected					| --> ls -l > myFile.txt		|
 | A command whose input is redirected					| --> sort < myFile.txt			|
-| Commands connected by piping							| --> ls -l | more				|
+| Commands connected by piping							| --> ls -l \| more				|
 | A line with multiple semicolon-separated commands		| --> ls -l ; pwd ; cat in.txt	|
 | A command to search previous commands					| --> history [-c] [number]		|
 | A command to execute the last command					| --> !!						|
 | A command to search/execute history (prefix-matching) | --> !prefix					|
+
 
 
